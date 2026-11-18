@@ -84,7 +84,7 @@ def RK4(R=R, h=3600, t_final=year, F=F):
     
     return R_hist
 
-def sim(R_hist, name, fps=15, duration=year/3600, dpi=100):
+def sim(R_hist, name, h=3600, speed=3600*24, fps=10, dpi=100):
     R_hist = np.array(R_hist)
 
     fig = plt.figure()
@@ -102,9 +102,8 @@ def sim(R_hist, name, fps=15, duration=year/3600, dpi=100):
     sun = ax.scatter([0], [0], [0])
     ax.scatter([0], [0], [0], color="blue")
 
-    n_frames = int(round(duration*fps))
-    n_frames = min(n_frames, len(R_hist))
-    indexs = np.linspace(0, len(R_hist)-1, n_frames, dtype=int)
+    stride = max(1, int(round(speed/fps/h)))
+    indexs = np.arange(0, len(R_hist), stride)
 
     def update(frame):
         R = R_hist[indexs[frame]]
@@ -119,7 +118,7 @@ def sim(R_hist, name, fps=15, duration=year/3600, dpi=100):
 
         sun._offsets3d = ([x], [y], [z])
 
-    animation = ani.FuncAnimation(fig=fig, func=update, frames=n_frames, interval=1000/fps,
+    animation = ani.FuncAnimation(fig=fig, func=update, frames=len(indexs), interval=1000/fps,
     blit=False)
     animation.save(f"multimedia/{name}.mp4", writer="ffmpeg", dpi=dpi, fps=fps)
     plt.close(fig)
