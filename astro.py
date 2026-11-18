@@ -2,64 +2,66 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib import animation as ani
 
-# Posició inicial
-R = np.array([
-    1.4710e11,       # r (m)
-    -24.0,           # dr (m/s)
-    np.deg2rad(113.05),  # theta (rad)
-    -1.57e-8,        # dtheta (rad/s)
-    0.0,             # phi (rad)
-    -7.27e-5         # dphi (rad/s)
-])
 
-Omega = 7.292115e-5
-Mt    = 5.9722e24
-Ms    = 1.98847e30
-G     = 6.67430e-11
+# Constants
 
-year   = 3600*24*365
+G  = 6.67430e-11     
+Mt = 5.9722e24       
+Ml = 7.342e22          
+Ms = 1.98841e30       
+
+hour = 3600
+day  = hour*24
+year = day*365
+
+eps    = np.radians(23.44)
+eix_terra = eix = np.array([0, np.sin(eps), np.cos(eps)])
+omega  = 7.2921159e-5
+
+# valors inicials
+# Posicions respecte al Sol [m] i velocitats [m/s]
+# Marc: eclíptica J2000 centrada al Sol, 2027-01-01 00:00 TDB
+a  = np.array([-2.6073e10,  1.44770e11, -8.93e6])   # Sol -> Terra
+da = np.array([-2.9790e4,  -5.397e3,     0.29])
+
+b  = np.array([-2.5930e10,  1.45100e11,  2.280e7])  # Sol -> Lluna
+db = np.array([-3.0792e4,  -4.978e3,     2.79])
+
+R = np.array([a, da, b, db])
+
+m0 = np.array([-0.1850, 0.9016, -0.3909])           # centre terra -> lat=0 lon=0
+theta0 = np.radians(100.66)
 
 
-def fdr(R):
-    r = R[0]
-    theta = R[2]
-    dtheta = R[3]
-    dphi = R[5]
-    return r*dtheta**2+r*np.sin(theta)**2*(dphi+Omega)**2-G*(Mt+Ms)/r**2
 
-def fdtheta(R):
-    r = R[0]
-    dr = R[1]
-    theta = R[2]
-    dtheta = R[3]
-    dphi = R[5]
-    return np.sin(2*theta)/2*(dphi+Omega)**2-2*dtheta*dr/r
-
-def fdphi(R):
-    r = R[0]
-    dr = R[1]
-    theta = R[2]
-    dtheta = R[3]
-    dphi = R[5]
-    return (-2*dr/r-np.sin(2*theta)/np.sin(theta)**2*dtheta)*(dphi+Omega)
-
-def fr(R):
+def fa(R):
     return R[1]
 
-def ftheta(R):
+def fb(R):
     return R[3]
 
-def fphi(R):
-    return R[5]
+def fda(R):
+    a = R[0]
+    b = R[2]
+    La = np.linalg.norm(a)
+    Lb = np.linalg.norm(b)
+    Lab= np.linalg.norm(a-b)
+    return -G*( (Ms+Mt)*a/La**3 + Ml*( (a-b)/Lab**3 + b/Lb**3 ) )
+
+def fdb(R):
+    a = R[0]
+    b = R[2]
+    La = np.linalg.norm(a)
+    Lb = np.linalg.norm(b)
+    Lab= np.linalg.norm(a-b)
+    return -G*( (Ms+Ml)*b/Lb**3 + Mt*( (b-a)/Lab**3 + a/La**3 ) )
 
 def F(R):
     return np.array([
-        fr(R),
-        fdr(R),
-        ftheta(R),
-        fdtheta(R),
-        fphi(R),
-        fdphi(R)
+        fa(R),
+        fda(R),
+        fb(R),
+        fdb(R)
     ])
 
 
@@ -84,13 +86,21 @@ def RK4(R=R, h=3600, t_final=year, F=F):
     
     return R_hist
 
+def meridia(t):
+    th = theta0 + omega*t
+    x_eq, y_eq = np.cos(th), np.sin(th)
+    return np.array([x_eq,
+                    y_eq*np.cos(eps),
+                    -y_eq*np.sin(eps)])
+
 def sim(R_hist, name, h=3600, speed=3600*24, fps=10, dpi=100):
+
     R_hist = np.array(R_hist)
 
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
 
-    r_max = np.max(R_hist[:, 0])
+    r_max = np.max(np.abs(R_hist[:, [0, 2]]))
     ax.set_xlim(-r_max, r_max)
     ax.set_ylim(-r_max, r_max)
     ax.set_zlim(-r_max, r_max)
@@ -99,24 +109,48 @@ def sim(R_hist, name, h=3600, speed=3600*24, fps=10, dpi=100):
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
 
-    sun = ax.scatter([0], [0], [0])
-    ax.scatter([0], [0], [0], color="blue")
+    sun   = ax.scatter([0], [0], [0], color="yellow")
+    earth = ax.scatter([0], [0], [0], color="blue")
+    #moon = ax.scatter([0], [0], [0], color="grey")
+
+    L1 = 0.15 * r_max
+    axis_line, = ax.plot([], [], [], color="green", lw=2)
+
+    L2 = 0.15 * r_max
+    facing_line, = ax.plot([], [], [], color="purple", lw=2)
 
     stride = max(1, int(round(speed/fps/h)))
     indexs = np.arange(0, len(R_hist), stride)
 
+
     def update(frame):
         R = R_hist[indexs[frame]]
+        t = h*indexs[frame]
 
-        r = R[0]
-        theta = R[2]
-        phi = R[4]
+        a = R[0]
+        b = R[2]
 
-        x = r*np.cos(phi)*np.sin(theta)
-        y = r*np.sin(phi)*np.sin(theta)
-        z = r*np.cos(theta)
+        xt = a[0]
+        yt = a[1]
+        zt = a[2]
 
-        sun._offsets3d = ([x], [y], [z])
+        xl = b[0]
+        yl = b[1]
+        zl = b[2]
+
+        earth._offsets3d = ([xt], [yt], [zt])
+        #moon._offsets3d = ([xl], [yl], [zl])
+
+        axis1 = a - L1*eix
+        axis2 = a + L1*eix
+        axis_line.set_data_3d([axis1[0], axis2[0]], [axis1[1], axis2[1]], [axis1[2], axis2[2]])
+
+
+        m = meridia(t)
+
+        facing1 = a
+        facing2 = a + L2*m
+        facing_line.set_data_3d([facing1[0], facing2[0]], [facing1[1], facing2[1]], [facing1[2], facing2[2]])
 
     animation = ani.FuncAnimation(fig=fig, func=update, frames=len(indexs), interval=1000/fps,
     blit=False)
@@ -133,6 +167,6 @@ if __name__ == "__main__":
 
     print("done")
 
-    sim(R_hist, "test")
+    sim(R_hist, "test", speed=3600*10)
 
     
