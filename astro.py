@@ -86,6 +86,40 @@ def RK4(R=R, h=3600, t_final=year, F=F):
     
     return R_hist
 
+def canviMarcSolTerra(R_hist, h=3600):
+    t=0
+    s_hist=[]
+    l_hist=[]
+    for R in R_hist:
+
+        th = theta0 + omega*t
+        
+        s = -R[0]
+        l = R[0]-R[2]
+
+        Rx = np.array([
+            [1, 0,            0           ],
+            [0, np.cos(eps), -np.sin(eps)],
+            [0, np.sin(eps),  np.cos(eps)],
+        ])
+
+        Rz = np.array([
+            [ np.cos(th), np.sin(th), 0],
+            [-np.sin(th), np.cos(th), 0],
+            [ 0,          0,          1],
+        ])
+
+        s = Rz @ Rx @ s
+        s_hist.append(s)
+
+        l = Rz @ Rx @ l
+        l_hist.append(l)
+        
+        t+=h
+
+    return s_hist, l_hist
+
+
 def meridia(t):
     th = theta0 + omega*t
     x_eq, y_eq = np.cos(th), np.sin(th)
@@ -93,69 +127,7 @@ def meridia(t):
                     y_eq*np.cos(eps),
                     -y_eq*np.sin(eps)])
 
-def sim(R_hist, name, h=3600, speed=3600*24, fps=10, dpi=100):
 
-    R_hist = np.array(R_hist)
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection="3d")
-
-    r_max = np.max(np.abs(R_hist[:, [0, 2]]))
-    ax.set_xlim(-r_max, r_max)
-    ax.set_ylim(-r_max, r_max)
-    ax.set_zlim(-r_max, r_max)
-
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_zlabel("Z")
-
-    sun   = ax.scatter([0], [0], [0], color="yellow")
-    earth = ax.scatter([0], [0], [0], color="blue")
-    #moon = ax.scatter([0], [0], [0], color="grey")
-
-    L1 = 0.15 * r_max
-    axis_line, = ax.plot([], [], [], color="green", lw=2)
-
-    L2 = 0.15 * r_max
-    facing_line, = ax.plot([], [], [], color="purple", lw=2)
-
-    stride = max(1, int(round(speed/fps/h)))
-    indexs = np.arange(0, len(R_hist), stride)
-
-
-    def update(frame):
-        R = R_hist[indexs[frame]]
-        t = h*indexs[frame]
-
-        a = R[0]
-        b = R[2]
-
-        xt = a[0]
-        yt = a[1]
-        zt = a[2]
-
-        xl = b[0]
-        yl = b[1]
-        zl = b[2]
-
-        earth._offsets3d = ([xt], [yt], [zt])
-        #moon._offsets3d = ([xl], [yl], [zl])
-
-        axis1 = a - L1*eix
-        axis2 = a + L1*eix
-        axis_line.set_data_3d([axis1[0], axis2[0]], [axis1[1], axis2[1]], [axis1[2], axis2[2]])
-
-
-        m = meridia(t)
-
-        facing1 = a
-        facing2 = a + L2*m
-        facing_line.set_data_3d([facing1[0], facing2[0]], [facing1[1], facing2[1]], [facing1[2], facing2[2]])
-
-    animation = ani.FuncAnimation(fig=fig, func=update, frames=len(indexs), interval=1000/fps,
-    blit=False)
-    animation.save(f"multimedia/{name}.mp4", writer="ffmpeg", dpi=dpi, fps=fps)
-    plt.close(fig)
 
         
 
@@ -165,8 +137,8 @@ if __name__ == "__main__":
 
     R_hist = RK4()
 
-    print("done")
+    s_hist, l_hist = canviMarcSolTerra(R_hist)
 
-    sim(R_hist, "test", speed=3600*10)
+    print("done")
 
     
